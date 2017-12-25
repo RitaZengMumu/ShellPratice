@@ -1,0 +1,64 @@
+#!/bin/bash
+parasnum=2
+help_msg(){
+	cat <<help
+		+--------------------------------------------------+
+		+Error Cause
+		+you enter $# parameters
+		+the total parameters number must be $parasnum	
+		+1st:HOST_IP
+		+2nd:HOST_PORT
+		+--------------------------------------------------+
+help
+
+}
+while true
+do
+export HOST_IP=$1
+export HOST_PORT=$2
+MYUSER=root
+MYPASS="abc123"
+MYSOCK=/application/mysql/data/tmp/mysql.sock
+MYSQL_PATH=/application/mysql/bin
+MYSQL_CMD="$MYSQL_PATH/Mysql -u$MYUSER -P$Mypass -S $MYSOCK"
+
+MailTitle=""
+time1=`date +"%Y%m%d%H%M%S"`
+time2=`date +"%Y-%m-%d %H:%M:%S"`
+SlaveStatusFile="/tmp/slave_status_${HOST_PORT}.${time1}"
+echo "------------Begins at :"$time2 >>$SlaveStatusFile
+echo "" >>$SlaveStatusFile
+
+
+#get slave status
+$MYSQL_CMD -e "show slave status\G" >>$SlaveStatusFile 2>&1
+
+#get io_thread_status,sql_thread_status,last_errno
+ 
+SlaveStatusArr=($($MYSQL_CMD -e "show slave status\G"|egrep "_Running|_Behind"|awk '{print $NF}'))
+echo "" >>$SlaveStatusFile
+if [ "${SlaveStatusArr[0]}" = 'NO' ]||[ "${SlaveStatusArr[1]}" = 'NO'  ];then
+	echo "Slave $HOST_IP $HOST_PORT is down!" >>$SlaveStatusFile
+	MailTile="[ERROR] Slave replication is down on $HOST_IP $HOST_PORT ! ErrNum:$Errno"
+fi
+
+[ "${SlaveStatusArr[2]}" = "NULL" ] && ${SlaveStatusArr[2]}=9999
+
+#delay behind master
+
+	if [ "${SlaveStatusArr[2]}" -gt 100 ];then 
+		echo `date +"%Y-%m-%d %H:%M:%S"` "slave is behind master $Behind seconds!" >>$SlaveStatusFile
+ 	MailTitle="[Warning] Slave delay $Behind seconds, from $HOST_IP $HOST_PORT"
+	fi
+
+	if [ -n "$MailTile" ];then
+		echo "title:$MailTitle" >>$SlaveStatusFile
+		source /scripts/maillist.cfg
+	cat ${SlaveStatusFile} | /bin/mail -s "$MailTitle" -c "$Mail_Address_MysqlStatus_cc" $Mail_Address_MysqlStatus
+	fi
+
+sleep 30
+done
+		
+	
+	fi
